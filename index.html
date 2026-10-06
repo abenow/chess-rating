@@ -25,6 +25,8 @@ button{cursor:pointer}
 .p1 .place{color:var(--gold)}.p2 .place{color:var(--silver)}.p3 .place{color:var(--bronze)}
 .p1{border-color:var(--gold)}
 .name{font-weight:600}
+.nicks{font-size:12px;margin:1px 0 2px}
+.nicks a{color:var(--accent);text-decoration:none;margin-right:10px;white-space:nowrap}
 .det{color:var(--muted);font-size:12.5px}
 .err{color:var(--warn);font-size:12.5px}
 .pts{font-weight:700;font-size:18px;text-align:right;white-space:nowrap}
@@ -184,7 +186,7 @@ async function chesscomGames(user, from, to) {
 
 // ----- Подсчёт -----
 async function loadStudent(s, p) {
-  const res = { name: s.name, win: 0, draw: 0, loss: 0, puzzles: 0, errors: [] };
+  const res = { name: s.name, lichess: s.lichess || '', chesscom: s.chesscom || '', win: 0, draw: 0, loss: 0, puzzles: 0, errors: [] };
   const add = o => { res.win += o.win; res.draw += o.draw; res.loss += o.loss; };
   if (s.lichess) {
     try { add(await lichessGames(s.lichess, p.from, p.to)); } catch (e) { res.errors.push(e.message); }
@@ -237,13 +239,19 @@ function render() {
     const err = r.errors.length ? `<div class="err">⚠ ${r.errors.join('; ')}</div>` : '';
     return `<div class="row ${!zero && place <= 3 ? 'p' + place : ''}">
       <div class="place">${medal}</div>
-      <div><div class="name">${esc(r.name)}</div><div class="det">${det}</div>${err}</div>
+      <div><div class="name">${esc(r.name)}</div>${nicks(r)}<div class="det">${det}</div>${err}</div>
       <div class="pts">${val}<small>${unit}</small></div></div>`;
   }).join('');
   document.getElementById('list').innerHTML = html || '<div class="loading">Список учеников пуст</div>';
   const t = new Date(RESULTS.at);
   document.getElementById('updated').textContent = `Обновлено: ${fmt(RESULTS.at)}`;
 }
+const nicks = r => {
+  const a = [];
+  if (r.lichess) a.push(`<a href="https://lichess.org/@/${encodeURIComponent(r.lichess)}" target="_blank" rel="noopener">Lichess: ${esc(r.lichess)}</a>`);
+  if (r.chesscom) a.push(`<a href="https://www.chess.com/member/${encodeURIComponent(r.chesscom)}" target="_blank" rel="noopener">Chess.com: ${esc(r.chesscom)}</a>`);
+  return a.length ? `<div class="nicks">${a.join('')}</div>` : '';
+};
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let PERIODS = [];
