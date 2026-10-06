@@ -2,7 +2,40 @@
   "title": "Рейтинг группы Вт/Чт",
   "puzzlePoint": 0.1,
   "students": [
-    { "name": "Пример 1 (замените)", "lichess": "thibault", "chesscom": "" },
-    { "name": "Пример 2 (замените)", "lichess": "", "chesscom": "hikaru" }
+    {
+      "name": "Abdurakhman2014",
+      "lichess": "Abdurakhman2014",
+      "chesscom": ""
+    },
+    {
+      "name": "Batyr15",
+      "lichess": "Batyr15",
+      "chesscom": ""
+    },
+    {
+      "name": "superSevara",
+      "lichess": "superSevara",
+      "chesscom": ""
+    },
+    {
+      "name": "Sofia_24-04",
+      "lichess": "Sofia_24-04",
+      "chesscom": ""
+    },
+    {
+      "name": "david_ldm",
+      "lichess": "david_ldm",
+      "chesscom": ""
+    },
+    {
+      "name": "Bogdan20-17",
+      "lichess": "Bogdan20-17",
+      "chesscom": ""
+    },
+    {
+      "name": "fedelta23",
+      "lichess": "fedelta23",
+      "chesscom": ""
+    }
   ]
 }
