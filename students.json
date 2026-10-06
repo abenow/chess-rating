@@ -1,0 +1,8 @@
+{
+  "title": "Рейтинг группы Вт/Чт",
+  "puzzlePoint": 0.1,
+  "students": [
+    { "name": "Пример 1 (замените)", "lichess": "thibault", "chesscom": "" },
+    { "name": "Пример 2 (замените)", "lichess": "", "chesscom": "hikaru" }
+  ]
+}
