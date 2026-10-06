@@ -60,7 +60,7 @@ button{cursor:pointer}
       <li>Победа — <b>1,5</b>, ничья — <b>1</b>, поражение — <b>0,5</b> очка.</li>
       <li>Партия засчитывается, если в ней сделано не меньше <span id="minMovesTxt">10</span> ходов каждой стороной. Партии с компьютером Lichess не считаются.</li>
       <li>Решённая задача на Lichess — <b id="pzTxt">0,1</b> очка. На Chess.com задачи посчитать нельзя: у сайта нет таких данных.</li>
-      <li>Период — между занятиями: от конца урока (21:30) до начала следующего (19:30), время Казахстана.</li>
+      <li>Рейтинг обнуляется каждый <b>четверг в 20:30</b> (время Алматы) — каждую неделю все начинают с нуля.</li>
     </ul>
   </div>
 </div>
@@ -68,9 +68,8 @@ button{cursor:pointer}
 <script>
 // ===== Настройки =====
 const TZ_OFFSET_H = 5;           // Казахстан, UTC+5
-const LESSON_DAYS = [2, 4];      // 2 = вторник, 4 = четверг
-const LESSON_START = [19, 30];   // начало урока
-const LESSON_END = [21, 30];     // конец урока
+const RESET_DAY = 4;             // 4 = четверг
+const RESET_TIME = [20, 30];     // обнуление в 20:30
 const MIN_BASE_SEC = 600;        // от 10 минут
 const MIN_MOVES = 10;            // минимум ходов каждой стороной
 const PTS = { win: 1.5, draw: 1, loss: 0.5 };
@@ -85,33 +84,15 @@ let CFG = null, TAB = 'total', RESULTS = null;
 const toLocal = ms => new Date(ms + TZ_OFFSET_H * H);
 const fromLocalParts = (y, m, d, hh, mm) => Date.UTC(y, m, d, hh, mm) - TZ_OFFSET_H * H;
 
-function lessonEvents(nowMs, count) {
-  // список уроков (start/end в UTC ms), от новых к старым, начиная с ближайшего будущего
-  const res = [];
-  const l = toLocal(nowMs);
-  let y = l.getUTCFullYear(), m = l.getUTCMonth(), d = l.getUTCDate() + 7;
-  for (let i = 0; i < 60 && res.length < count; i++, d--) {
-    const dt = new Date(Date.UTC(y, m, d));
-    if (LESSON_DAYS.includes(dt.getUTCDay())) {
-      res.push({
-        start: fromLocalParts(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate(), ...LESSON_START),
-        end: fromLocalParts(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate(), ...LESSON_END)
-      });
-    }
-  }
-  return res;
-}
-
 function buildPeriods(nowMs) {
-  const ev = lessonEvents(nowMs, PERIODS_BACK + 6);
+  // неделя: с четверга 20:30 до следующего четверга 20:30 (Алматы)
+  const l = toLocal(nowMs);
+  const back = (l.getUTCDay() - RESET_DAY + 7) % 7;
+  let from = fromLocalParts(l.getUTCFullYear(), l.getUTCMonth(), l.getUTCDate() - back, ...RESET_TIME);
+  if (from > nowMs) from -= 7 * D;
   const periods = [];
-  for (let i = 0; i < ev.length - 1; i++) {
-    const p = { from: ev[i + 1].end, to: ev[i].start };
-    if (p.from > nowMs) continue;          // будущее
-    periods.push(p);
-    if (periods.length >= PERIODS_BACK) break;
-  }
-  return periods; // [0] = текущий или ближайший прошедший
+  for (let i = 0; i < PERIODS_BACK; i++) periods.push({ from: from - i * 7 * D, to: from - i * 7 * D + 7 * D });
+  return periods; // [0] = текущая неделя
 }
 
 function fmt(ms) {
@@ -220,7 +201,7 @@ async function loadStudent(s, p) {
 }
 
 async function loadAll(p, force) {
-  const key = `cr:${p.from}:${p.to}`;
+  const key = `cr:${p.from}:${p.to}:${CFG.students.map(x => x.lichess + x.chesscom).join()}`;
   if (!force) {
     try {
       const c = JSON.parse(sessionStorage.getItem(key) || 'null');
@@ -295,7 +276,7 @@ async function init() {
   PERIODS = buildPeriods(Date.now());
   const sel = document.getElementById('periodSel');
   sel.innerHTML = PERIODS.map((p, i) =>
-    `<option value="${i}">${i === 0 && Date.now() < p.to ? 'Текущий: ' : ''}${fmt(p.from).slice(0, 8)} – ${fmt(p.to).slice(0, 8)}</option>`).join('');
+    `<option value="${i}">${i === 0 ? 'Эта неделя: ' : ''}${fmt(p.from).slice(0, 8)} – ${fmt(p.to).slice(0, 8)}</option>`).join('');
   sel.onchange = () => run(false);
   document.getElementById('reload').onclick = () => run(true);
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
