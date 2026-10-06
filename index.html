@@ -52,6 +52,309 @@ button{cursor:pointer}
     <button data-tab="total" class="on">Общий зачёт</button>
     <button data-tab="games">Партии</button>
     <button data-tab="puzzles">Задачи</button>
+    <button data-tab="practice">Практика</button>
+  </div>
+  <div class="list" id="list"><div class="loading">Загружаю партии с Lichess и Chess.com…</div></div>
+
+  <div class="rules">
+    <h3>Как считаются очки</h3>
+    <ul>
+      <li>Считаются партии с контролем <b>от 10 минут</b> (рапид и классика), обычные шахматы.</li>
+      <li>Победа — <b>1,5</b>, ничья — <b>1</b>, поражение — <b>0,5</b> очка.</li>
+      <li>Партия засчитывается, если в ней сделано не меньше <span id="minMovesTxt">10</span> ходов каждой стороной. Партии с компьютером Lichess не считаются.</li>
+      <li>Вкладка «Практика» — сколько позиций пройдено за неделю в разделе Lichess «Практика» (матовые узоры, тактика, эндшпиль). Очки за неё пока не начисляются.</li>
+      <li>Решённая задача на Lichess — <b id="pzTxt">0,1</b> очка. На Chess.com задачи посчитать нельзя: у сайта нет таких данных.</li>
+      <li>Рейтинг обнуляется каждый <b>четверг в 20:30</b> (время Алматы) — каждую неделю все начинают с нуля.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+// ===== Настройки =====
+const TZ_OFFSET_H = 5;           // Казахстан, UTC+5
+const RESET_DAY = 4;             // 4 = четверг
+const RESET_TIME = [20, 30];     // обнуление в 20:30
+const MIN_BASE_SEC = 600;        // от 10 минут
+const MIN_MOVES = 10;            // минимум ходов каждой стороной
+const PTS = { win: 1.5, draw: 1, loss: 0.5 };
+const PERIODS_BACK = 6;
+// =====================
+
+const H = 3600e3, D = 24 * H;
+const DAY_NAMES = ['вс','пн','вт','ср','чт','пт','сб'];
+let CFG = null, TAB = 'total', RESULTS = null;
+
+// "Местное" время Казахстана через сдвиг UTC
+const toLocal = ms => new Date(ms + TZ_OFFSET_H * H);
+const fromLocalParts = (y, m, d, hh, mm) => Date.UTC(y, m, d, hh, mm) - TZ_OFFSET_H * H;
+
+function buildPeriods(nowMs) {
+  // неделя: с четверга 20:30 до следующего четверга 20:30 (Алматы)
+  const l = toLocal(nowMs);
+  const back = (l.getUTCDay() - RESET_DAY + 7) % 7;
+  let from = fromLocalParts(l.getUTCFullYear(), l.getUTCMonth(), l.getUTCDate() - back, ...RESET_TIME);
+  if (from > nowMs) from -= 7 * D;
+  const periods = [];
+  for (let i = 0; i < PERIODS_BACK; i++) periods.push({ from: from - i * 7 * D, to: from - i * 7 * D + 7 * D });
+  return periods; // [0] = текущая неделя
+}
+
+function fmt(ms) {
+  const l = toLocal(ms);
+  const dd = String(l.getUTCDate()).padStart(2, '0'), mo = String(l.getUTCMonth() + 1).padStart(2, '0');
+  const hh = String(l.getUTCHours()).padStart(2, '0'), mi = String(l.getUTCMinutes()).padStart(2, '0');
+  return `${DAY_NAMES[l.getUTCDay()]} ${dd}.${mo} ${hh}:${mi}`;
+}
+const num = x => (Math.round(x * 10) / 10).toString().replace('.', ',');
+
+// ----- Lichess -----
+async function lichessGames(user, from, to) {
+  const url = `https://lichess.org/api/games/user/${encodeURIComponent(user)}?since=${from}&until=${to}&perfType=rapid,classical&moves=true&clocks=false&evals=false&opening=false`;
+  const r = await fetch(url, { headers: { Accept: 'application/x-ndjson' } });
+  if (r.status === 404) throw new Error('ник не найден на Lichess');
+  if (r.status === 429) throw new Error('Lichess просит подождать, нажмите «Обновить» через минуту');
+  if (!r.ok) throw new Error('Lichess: ошибка ' + r.status);
+  const text = await r.text();
+  const out = { win: 0, draw: 0, loss: 0 };
+  const me = user.toLowerCase();
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    const g = JSON.parse(line);
+    if (g.variant !== 'standard') continue;
+    if (!g.clock || g.clock.initial < MIN_BASE_SEC) continue;
+    if (['created', 'started', 'aborted', 'noStart', 'unknownFinish'].includes(g.status)) continue;
+    const end = g.lastMoveAt || g.createdAt;
+    if (end < from || end >= to) continue;
+    const w = g.players.white, b = g.players.black;
+    if (w.aiLevel || b.aiLevel) continue;
+    const plies = (g.moves || '').trim().split(/\s+/).filter(Boolean).length;
+    if (plies < MIN_MOVES * 2) continue;
+    const color = (w.user && w.user.id === me) ? 'white' : 'black';
+    if (!g.winner) out.draw++; else if (g.winner === color) out.win++; else out.loss++;
+  }
+  return out;
+}
+
+async function lichessPuzzles(user, from, to) {
+  const r = await fetch(`https://lichess.org/api/user/${encodeURIComponent(user)}/activity`);
+  if (!r.ok) return { solved: 0, practice: 0 };
+  const days = await r.json();
+  let solved = 0, practice = 0;
+  for (const d of days) {
+    // Lichess группирует активность по суткам (UTC). Сутки относим к периоду по их середине.
+    const mid = (d.interval.start + d.interval.end) / 2;
+    if (mid < from || mid >= to) continue;
+    if (d.puzzles && d.puzzles.score) solved += d.puzzles.score.win || 0;
+    if (Array.isArray(d.practice)) for (const p of d.practice) practice += p.nbPositions || 0;
+  }
+  return { solved, practice };
+}
+
+// ----- Chess.com -----
+const CC_DRAWS = ['agreed', 'repetition', 'stalemate', 'insufficient', '50move', 'timevsinsufficient'];
+async function chesscomGames(user, from, to) {
+  const me = user.toLowerCase();
+  const months = new Set();
+  for (let t = from; t <= to + D; t += 10 * D) {
+    const dt = new Date(Math.min(t, to));
+    months.add(`${dt.getUTCFullYear()}/${String(dt.getUTCMonth() + 1).padStart(2, '0')}`);
+  }
+  const out = { win: 0, draw: 0, loss: 0 };
+  for (const ym of months) {
+    const r = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(me)}/games/${ym}`);
+    if (r.status === 404) {
+      const p = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(me)}`);
+      if (p.status === 404) throw new Error('ник не найден на Chess.com');
+      continue;
+    }
+    if (!r.ok) throw new Error('Chess.com: ошибка ' + r.status);
+    const j = await r.json();
+    for (const g of j.games || []) {
+      if (g.rules !== 'chess') continue;
+      if (!['rapid'].includes(g.time_class) && g.time_class !== 'classical') continue;
+      const base = parseInt(String(g.time_control).split('+')[0], 10);
+      if (!(base >= MIN_BASE_SEC)) continue;
+      const end = g.end_time * 1000;
+      if (end < from || end >= to) continue;
+      const plies = g.tcn ? g.tcn.length / 2 : 999;
+      if (plies < MIN_MOVES * 2) continue;
+      const side = g.white.username.toLowerCase() === me ? g.white : g.black;
+      if (side.result === 'win') out.win++;
+      else if (CC_DRAWS.includes(side.result)) out.draw++;
+      else out.loss++;
+    }
+  }
+  return out;
+}
+
+// ----- Подсчёт -----
+async function loadStudent(s, p) {
+  const res = { name: s.name, lichess: s.lichess || '', chesscom: s.chesscom || '', win: 0, draw: 0, loss: 0, puzzles: 0, practice: 0, errors: [] };
+  const add = o => { res.win += o.win; res.draw += o.draw; res.loss += o.loss; };
+  if (s.lichess) {
+    try { add(await lichessGames(s.lichess, p.from, p.to)); } catch (e) { res.errors.push(e.message); }
+    try { const a = await lichessPuzzles(s.lichess, p.from, p.to); res.puzzles += a.solved; res.practice += a.practice; } catch (e) {}
+  }
+  if (s.chesscom) {
+    try { add(await chesscomGames(s.chesscom, p.from, p.to)); } catch (e) { res.errors.push(e.message); }
+  }
+  res.games = res.win + res.draw + res.loss;
+  res.gamePts = res.win * PTS.win + res.draw * PTS.draw + res.loss * PTS.loss;
+  res.puzzlePts = res.puzzles * (CFG.puzzlePoint ?? 0.1);
+  res.total = res.gamePts + res.puzzlePts;
+  return res;
+}
+
+async function loadAll(p, force) {
+  const key = `cr:${p.from}:${p.to}:${CFG.students.map(x => x.lichess + x.chesscom).join()}`;
+  if (!force) {
+    try {
+      const c = JSON.parse(sessionStorage.getItem(key) || 'null');
+      if (c && Date.now() - c.at < 5 * 60e3) return c;
+    } catch (e) {}
+  }
+  const list = document.getElementById('list');
+  const results = [];
+  let done = 0;
+  // Lichess просит не делать много запросов одновременно — по одному ученику за раз
+  for (const s of CFG.students) {
+    list.innerHTML = `<div class="loading">Загружаю… ${done}/${CFG.students.length}</div>`;
+    results.push(await loadStudent(s, p));
+    done++;
+  }
+  const data = { at: Date.now(), results };
+  try { sessionStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+  return data;
+}
+
+function render() {
+  if (!RESULTS) return;
+  const key = TAB === 'games' ? 'gamePts' : TAB === 'puzzles' ? 'puzzles' : TAB === 'practice' ? 'practice' : 'total';
+  const arr = [...RESULTS.results].sort((a, b) => b[key] - a[key] || b.games - a.games || a.name.localeCompare(b.name));
+  let place = 0, prev = null;
+  const html = arr.map((r, i) => {
+    if (r[key] !== prev) { place = i + 1; prev = r[key]; }
+    const zero = r[key] === 0;
+    const medal = !zero && place <= 3 ? ['🥇', '🥈', '🥉'][place - 1] : place;
+    const val = key === 'puzzles' ? r.puzzles : key === 'practice' ? (r.practice || 0) : num(r[key]);
+    const unit = key === 'puzzles' ? 'задач' : key === 'practice' ? 'позиций' : 'очков';
+    const det = `Партий: ${r.games} (+${r.win} =${r.draw} −${r.loss}) · Задач: ${r.puzzles} · Практика: ${r.practice || 0}`;
+    const err = r.errors.length ? `<div class="err">⚠ ${r.errors.join('; ')}</div>` : '';
+    return `<div class="row ${!zero && place <= 3 ? 'p' + place : ''}">
+      <div class="place">${medal}</div>
+      <div><div class="name">${esc(r.name)}</div>${nicks(r)}<div class="det">${det}</div>${err}</div>
+      <div class="pts">${val}<small>${unit}</small></div></div>`;
+  }).join('');
+  document.getElementById('list').innerHTML = html || '<div class="loading">Список учеников пуст</div>';
+  const t = new Date(RESULTS.at);
+  document.getElementById('updated').textContent = `Обновлено: ${fmt(RESULTS.at)}`;
+}
+const nicks = r => {
+  const a = [];
+  if (r.lichess) a.push(`<a href="https://lichess.org/@/${encodeURIComponent(r.lichess)}" target="_blank" rel="noopener">Lichess: ${esc(r.lichess)}</a>`);
+  if (r.chesscom) a.push(`<a href="https://www.chess.com/member/${encodeURIComponent(r.chesscom)}" target="_blank" rel="noopener">Chess.com: ${esc(r.chesscom)}</a>`);
+  return a.length ? `<div class="nicks">${a.join('')}</div>` : '';
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let PERIODS = [];
+async function run(force) {
+  const p = PERIODS[+document.getElementById('periodSel').value];
+  const live = Date.now() < p.to;
+  const to = Math.min(p.to, Date.now());
+  document.getElementById('periodInfo').innerHTML =
+    `Период: <b>${fmt(p.from)}</b> → <b>${fmt(p.to)}</b>` +
+    (live ? ` · идёт сейчас, осталось ${left(p.to - Date.now())}` : ' · завершён');
+  RESULTS = await loadAll({ from: p.from, to }, force);
+  render();
+}
+function left(ms) {
+  const h = Math.floor(ms / H), m = Math.floor((ms % H) / 60e3);
+  return h >= 24 ? `${Math.floor(h / 24)} д ${h % 24} ч` : `${h} ч ${m} мин`;
+}
+
+async function init() {
+  try {
+    CFG = await (await fetch('students.json?' + Date.now())).json();
+  } catch (e) {
+    document.getElementById('list').innerHTML = '<div class="err">Не удалось прочитать students.json</div>';
+    return;
+  }
+  document.getElementById('title').textContent = CFG.title || 'Рейтинг группы';
+  document.title = CFG.title || 'Рейтинг группы';
+  document.getElementById('pzTxt').textContent = num(CFG.puzzlePoint ?? 0.1);
+  document.getElementById('minMovesTxt').textContent = MIN_MOVES;
+  PERIODS = buildPeriods(Date.now());
+  const sel = document.getElementById('periodSel');
+  sel.innerHTML = PERIODS.map((p, i) =>
+    `<option value="${i}">${i === 0 ? 'Эта неделя: ' : ''}${fmt(p.from).slice(0, 8)} – ${fmt(p.to).slice(0, 8)}</option>`).join('');
+  sel.onchange = () => run(false);
+  document.getElementById('reload').onclick = () => run(true);
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+    TAB = b.dataset.tab;
+    document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+    render();
+  });
+  run(false);
+}
+init();
+</script>
+</body>
+</html>
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Рейтинг группы</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--text:#1d1d1f;--muted:#6b6b70;--line:#e6e4dd;--accent:#2f6b3f;--accent-soft:#e3efe5;--gold:#c9a227;--silver:#9aa0a6;--bronze:#b0703c;--warn:#b3541e}
+@media (prefers-color-scheme:dark){:root{--bg:#141414;--card:#1e1e1f;--text:#ececec;--muted:#9a9aa0;--line:#2e2e30;--accent:#7cc48d;--accent-soft:#1f3326;--warn:#e08a5a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px}
+.bar{display:flex;gap:8px;align-items:center;margin:16px 0 12px;flex-wrap:wrap}
+select,button{font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text)}
+button{cursor:pointer}
+.period{background:var(--accent-soft);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:14px}
+.period b{color:var(--accent)}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.list{display:flex;flex-direction:column;gap:8px}
+.row{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center}
+.place{font-weight:700;font-size:18px;text-align:center}
+.p1 .place{color:var(--gold)}.p2 .place{color:var(--silver)}.p3 .place{color:var(--bronze)}
+.p1{border-color:var(--gold)}
+.name{font-weight:600}
+.nicks{font-size:12px;margin:1px 0 2px}
+.nicks a{color:var(--accent);text-decoration:none;margin-right:10px;white-space:nowrap}
+.det{color:var(--muted);font-size:12.5px}
+.err{color:var(--warn);font-size:12.5px}
+.pts{font-weight:700;font-size:18px;text-align:right;white-space:nowrap}
+.pts small{display:block;font-weight:400;font-size:11px;color:var(--muted)}
+.rules{margin-top:22px;color:var(--muted);font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.rules h3{margin:0 0 6px;font-size:14px;color:var(--text)}
+.rules ul{margin:0;padding-left:18px}
+.loading{color:var(--muted);padding:20px 0;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">Рейтинг группы</h1>
+  <div class="sub" id="updated">Загрузка…</div>
+
+  <div class="bar">
+    <select id="periodSel" aria-label="Период"></select>
+    <button id="reload">Обновить</button>
+  </div>
+  <div class="period" id="periodInfo"></div>
+
+  <div class="tabs">
+    <button data-tab="total" class="on">Общий зачёт</button>
+    <button data-tab="games">Партии</button>
+    <button data-tab="puzzles">Задачи</button>
   </div>
   <div class="list" id="list"><div class="loading">Загружаю партии с Lichess и Chess.com…</div></div>
 
