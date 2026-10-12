@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Рейтинги групп — тренер</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--text:#1d1d1f;--muted:#6b6b70;--line:#e6e4dd;--accent:#2f6b3f}
+@media (prefers-color-scheme:dark){:root{--bg:#141414;--card:#1e1e1f;--text:#ececec;--muted:#9a9aa0;--line:#2e2e30;--accent:#7cc48d}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+body{display:flex;flex-direction:column}
+header{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 12px}
+.inner{max-width:720px;margin:0 auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lbl{color:var(--muted);font-size:13px;margin-right:4px}
+.seg{display:flex;gap:6px;flex:1}
+.seg button{flex:1;font:inherit;font-weight:600;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+a.open{font-size:13px;color:var(--accent);text-decoration:none;white-space:nowrap}
+iframe{flex:1;width:100%;border:0;display:block;background:var(--bg)}
+</style>
+</head>
+<body>
+<header><div class="inner">
+  <span class="lbl">Группа:</span>
+  <div class="seg" id="seg"></div>
+  <a class="open" id="open" target="_blank" rel="noopener">Ссылка для группы ↗</a>
+</div></header>
+<iframe id="frame" title="Рейтинг группы"></iframe>
+<script>
+// Список групп: название кнопки и путь к странице группы
+const GROUPS = [
+  { name: 'Вт/Чт', path: '../' },
+  { name: 'Пн/Ср', path: '../pn-sr/' }
+];
+const seg = document.getElementById('seg'), frame = document.getElementById('frame'), open = document.getElementById('open');
+let cur = 0;
+try { const v = +localStorage.getItem('coach-group'); if (GROUPS[v]) cur = v; } catch (e) {}
+function show(i) {
+  cur = i;
+  frame.src = GROUPS[i].path + '?t=' + Date.now();
+  open.href = GROUPS[i].path;
+  [...seg.children].forEach((b, j) => b.classList.toggle('on', j === i));
+  try { localStorage.setItem('coach-group', i); } catch (e) {}
+}
+GROUPS.forEach((g, i) => { const b = document.createElement('button'); b.textContent = g.name; b.onclick = () => show(i); seg.appendChild(b); });
+show(cur);
+</script>
+</body>
+</html>
