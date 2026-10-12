@@ -1,0 +1,43 @@
+{
+  "title": "Рейтинг группы Пн/Ср",
+  "puzzlePoint": 0.1,
+  "resetDay": 3,
+  "resetTime": "21:30",
+  "students": [
+    {
+      "name": "Демид",
+      "lichess": "demidvassilyev",
+      "chesscom": ""
+    },
+    {
+      "name": "Ислам",
+      "lichess": "Islam_tsoy",
+      "chesscom": ""
+    },
+    {
+      "name": "Алижан",
+      "lichess": "alizhan_aizhan",
+      "chesscom": ""
+    },
+    {
+      "name": "Жантемир",
+      "lichess": "Zhan7emir",
+      "chesscom": ""
+    },
+    {
+      "name": "Муса",
+      "lichess": "Musamusi",
+      "chesscom": ""
+    },
+    {
+      "name": "Ибрагим",
+      "lichess": "Ibrahim_Aidaruly",
+      "chesscom": ""
+    },
+    {
+      "name": "Жасмин",
+      "lichess": "Zsamin0302",
+      "chesscom": ""
+    }
+  ]
+}
