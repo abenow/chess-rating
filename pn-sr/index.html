@@ -75,7 +75,7 @@ button{cursor:pointer}
       <li>Победа — <b>1,5</b>, ничья — <b>1</b>, поражение — <b>0,5</b> очка.</li>
       <li>Партия засчитывается, если в ней сделано не меньше <span id="minMovesTxt">10</span> ходов каждой стороной. Партии с компьютером Lichess не считаются.</li>
       <li>Вкладка «Практика» — сколько позиций пройдено за неделю в разделе Lichess «Практика» (матовые узоры, тактика, эндшпиль). Очки за неё пока не начисляются.</li>
-      <li>Решённая задача на Lichess — <b id="pzTxt">0,1</b> очка. Считается так: решённые минус нерешённые за день, но не больше 30 в день. На Chess.com задачи посчитать нельзя: у сайта нет таких данных.</li>
+      <li>Решённая задача на Lichess — <b id="pzTxt">0,1</b> очка. Нерешённые задачи не считаются; за один день засчитывается не больше 30 задач. На Chess.com задачи посчитать нельзя: у сайта нет таких данных.</li>
       <li>Рейтинг обнуляется раз в неделю: <b id="resetTxt">в четверг в 20:30</b> (время Алматы) — каждую неделю все начинают с нуля.</li>
     </ul>
   </div>
@@ -158,9 +158,8 @@ async function lichessPuzzles(user, from, to) {
     const mid = (d.interval.start + d.interval.end) / 2;
     if (mid < from || mid >= to) continue;
     if (d.puzzles && d.puzzles.score) {
-      // решённые минус нерешённые, но не меньше 0 и не больше лимита за день
-      const sc = d.puzzles.score;
-      solved += Math.min(PUZZLE_DAY_CAP, Math.max(0, (sc.win || 0) - (sc.loss || 0)));
+      // считаются только решённые задачи, но не больше лимита за день
+      solved += Math.min(PUZZLE_DAY_CAP, d.puzzles.score.win || 0);
     }
     if (Array.isArray(d.practice)) for (const p of d.practice) practice += p.nbPositions || 0;
   }
