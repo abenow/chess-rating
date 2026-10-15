@@ -72,7 +72,7 @@ button{cursor:pointer}
   <div class="rules">
     <h3>Как считаются очки</h3>
     <ul>
-      <li>Считаются партии с контролем <b>от 10 минут</b> (рапид и классика), обычные шахматы.</li>
+      <li>Считаются партии с контролем <b>от 10 минут</b> (рапид и классика), обычные шахматы. На Lichess также считаются партии <b>без ограничения времени</b> и по переписке.</li>
       <li>Победа — <b>1,5</b>, ничья — <b>1</b>, поражение — <b>0,5</b> очка.</li>
       <li>Партия засчитывается, если в ней сделано не меньше <span id="minMovesTxt">10</span> ходов каждой стороной. Партии с компьютером Lichess не считаются.</li>
       <li>Вкладка «Практика» — сколько позиций пройдено за неделю в разделе Lichess «Практика» (матовые узоры, тактика, эндшпиль). Очки за неё пока не начисляются.</li>
@@ -135,7 +135,7 @@ async function fetchRetry(url, opts) {
 
 // ----- Lichess -----
 async function lichessGames(user, from, to) {
-  const url = `https://lichess.org/api/games/user/${encodeURIComponent(user)}?since=${from}&until=${to}&perfType=rapid,classical&moves=true&clocks=false&evals=false&opening=false`;
+  const url = `https://lichess.org/api/games/user/${encodeURIComponent(user)}?since=${from}&until=${to}&perfType=rapid,classical,correspondence&moves=true&clocks=false&evals=false&opening=false`;
   const r = await fetchRetry(url, { headers: { Accept: 'application/x-ndjson' } });
   if (r.status === 404) throw new Error('ник не найден на Lichess');
   if (r.status === 429) throw new Error('Lichess просит подождать, нажмите «Обновить» через минуту');
@@ -147,7 +147,7 @@ async function lichessGames(user, from, to) {
     if (!line.trim()) continue;
     const g = JSON.parse(line);
     if (g.variant !== 'standard') continue;
-    if (!g.clock || g.clock.initial < MIN_BASE_SEC) continue;
+    if (g.speed !== 'correspondence' && (!g.clock || g.clock.initial < MIN_BASE_SEC)) continue; // партии без часов / по переписке тоже считаются
     if (['created', 'started', 'aborted', 'noStart', 'unknownFinish'].includes(g.status)) continue;
     const end = g.lastMoveAt || g.createdAt;
     if (end < from || end >= to) continue;
