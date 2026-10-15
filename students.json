@@ -1,6 +1,8 @@
 {
   "title": "Рейтинг группы Вт/Чт",
   "puzzlePoint": 0.1,
+  "resetDay": 4,
+  "resetTime": "21:30",
   "students": [
     {
       "name": "Абдурахман",
