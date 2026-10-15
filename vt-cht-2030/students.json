@@ -1,0 +1,38 @@
+{
+  "title": "Рейтинг группы Вт/Чт 20:30",
+  "puzzlePoint": 0.1,
+  "resetDay": 4,
+  "resetTime": "21:30",
+  "students": [
+    {
+      "name": "Ансар",
+      "lichess": "AnsarShakhmaran",
+      "chesscom": ""
+    },
+    {
+      "name": "Димаш",
+      "lichess": "Daniyaruly_Dimash",
+      "chesscom": ""
+    },
+    {
+      "name": "Давид",
+      "lichess": "Kimdavid2018",
+      "chesscom": ""
+    },
+    {
+      "name": "Александр",
+      "lichess": "AlexandrKim0309",
+      "chesscom": ""
+    },
+    {
+      "name": "Аиша",
+      "lichess": "AichaKhanifa",
+      "chesscom": ""
+    },
+    {
+      "name": "Марк",
+      "lichess": "Chan_Mark",
+      "chesscom": ""
+    }
+  ]
+}
