@@ -27,6 +27,7 @@ button{cursor:pointer}
 .name{font-weight:600}
 .nicks{font-size:12px;margin:1px 0 2px;display:flex;flex-wrap:wrap;gap:0 10px}
 .nicks a{color:var(--accent);text-decoration:none;overflow-wrap:anywhere}
+.nicks .cnt{color:var(--text);font-weight:600}
 .row>div:nth-child(2){min-width:0}
 .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .tabs button{white-space:nowrap;flex:0 0 auto}
@@ -220,11 +221,11 @@ async function loadStudent(s, p) {
   const res = { name: s.name, lichess: s.lichess || '', chesscom: s.chesscom || '', win: 0, draw: 0, loss: 0, puzzles: 0, practice: 0, errors: [] };
   const add = o => { res.win += o.win; res.draw += o.draw; res.loss += o.loss; };
   if (s.lichess) {
-    try { add(await lichessGames(s.lichess, p.from, p.to)); } catch (e) { res.errors.push(e.message); }
+    try { const o = await lichessGames(s.lichess, p.from, p.to); add(o); res.liGames = o.win + o.draw + o.loss; } catch (e) { res.errors.push(e.message); }
     try { const a = await lichessPuzzles(s.lichess, p.from, p.to); res.puzzles += a.solved; res.practice += a.practice; } catch (e) {}
   }
   if (s.chesscom) {
-    try { add(await chesscomGames(s.chesscom, p.from, p.to)); } catch (e) { res.errors.push(e.message); }
+    try { const o = await chesscomGames(s.chesscom, p.from, p.to); add(o); res.ccGames = o.win + o.draw + o.loss; } catch (e) { res.errors.push(e.message); }
   }
   res.games = res.win + res.draw + res.loss;
   res.gamePts = res.win * PTS.win + res.draw * PTS.draw + res.loss * PTS.loss;
@@ -267,7 +268,7 @@ function render() {
     const medal = !zero && place <= 3 ? ['🥇', '🥈', '🥉'][place - 1] : place;
     const val = key === 'puzzles' ? r.puzzles : key === 'practice' ? (r.practice || 0) : num(r[key]);
     const unit = key === 'puzzles' ? 'задач' : key === 'practice' ? 'позиций' : 'очков';
-    const det = `Партий: ${r.games} (+${r.win} =${r.draw} −${r.loss}) · Задач: ${r.puzzles} · Практика: ${r.practice || 0}`;
+    const det = `Победы: ${r.win} · Ничьи: ${r.draw} · Поражения: ${r.loss}<br>Задачи: ${r.puzzles} · Практика: ${r.practice || 0}`;
     const err = r.errors.length ? `<div class="err">⚠ ${r.errors.join('; ')}</div>` : '';
     return `<div class="row ${!zero && place <= 3 ? 'p' + place : ''}">
       <div class="place">${medal}</div>
@@ -278,10 +279,11 @@ function render() {
   const t = new Date(RESULTS.at);
   document.getElementById('updated').textContent = `Обновлено: ${fmt(RESULTS.at)}`;
 }
+const games = n => { n = n || 0; const m10 = n % 10, m100 = n % 100; const w = (m10 === 1 && m100 !== 11) ? 'партия' : (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) ? 'партии' : 'партий'; return `${n} ${w}`; };
 const nicks = r => {
   const a = [];
-  if (r.lichess) a.push(`<a href="https://lichess.org/@/${encodeURIComponent(r.lichess)}" target="_blank" rel="noopener">Lichess: ${esc(r.lichess)}</a>`);
-  if (r.chesscom) a.push(`<a href="https://www.chess.com/member/${encodeURIComponent(r.chesscom)}" target="_blank" rel="noopener">Chess.com: ${esc(r.chesscom)}</a>`);
+  if (r.lichess) a.push(`<a href="https://lichess.org/@/${encodeURIComponent(r.lichess)}" target="_blank" rel="noopener">Lichess: ${esc(r.lichess)}</a> <span class="cnt">— ${games(r.liGames)}</span>`);
+  if (r.chesscom) a.push(`<a href="https://www.chess.com/member/${encodeURIComponent(r.chesscom)}" target="_blank" rel="noopener">Chess.com: ${esc(r.chesscom)}</a> <span class="cnt">— ${games(r.ccGames)}</span>`);
   return a.length ? `<div class="nicks">${a.join('')}</div>` : '';
 };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
